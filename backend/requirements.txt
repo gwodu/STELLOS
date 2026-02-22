@@ -1,0 +1,13 @@
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+python-dotenv==1.0.1
+supabase==2.4.3
+python-multipart==0.0.9
+requests==2.31.0
+librosa==0.10.1
+soundfile==0.12.1
+ffmpeg-python==0.2.0
+torch==2.2.1
+transformers==4.38.2
+stripe==8.6.0
+xrpl-py==2.8.0
