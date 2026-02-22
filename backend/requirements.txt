@@ -11,3 +11,4 @@ torch==2.2.1
 transformers==4.38.2
 stripe
 xrpl-py
+websockets>=14.0
