@@ -1,4 +1,4 @@
-# Use an official lightweight Python image (Hugging Face Spaces supports standard Dockerfiles)
+# Use an official lightweight Python image
 FROM python:3.11-slim
 
 # Install system dependencies required for audio processing
