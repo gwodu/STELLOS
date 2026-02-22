@@ -10,5 +10,4 @@ ffmpeg-python==0.2.0
 torch==2.2.1
 transformers==4.38.2
 stripe
-xrpl-py
-websockets>=14.0
+xrpl-py==3.0.0
