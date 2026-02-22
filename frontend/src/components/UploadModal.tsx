@@ -22,7 +22,7 @@ export default function UploadModal({ onClose }: { onClose: () => void }) {
         formData.append("artist_name", artist || "Unknown Artist");
 
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:7860";
             const res = await fetch(`${apiUrl}/upload`, {
                 method: "POST",
                 body: formData,

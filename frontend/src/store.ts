@@ -10,6 +10,9 @@ export interface Track {
     status: string;
     map_x: number;
     map_y: number;
+    vote_score?: number;
+    licensing_enabled?: boolean;
+    artist_id?: string;
 }
 
 interface StellosState {

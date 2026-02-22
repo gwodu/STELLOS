@@ -1,13 +1,12 @@
 CREATE TABLE public.events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id TEXT NOT NULL,
     user_id UUID,
-    track_id UUID REFERENCES public.tracks(id),
+    session_id TEXT NOT NULL,
+    track_id UUID NOT NULL REFERENCES public.tracks(id),
     event_type TEXT NOT NULL,
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     context TEXT,
     meta JSONB,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_events_session_type ON public.events(session_id, event_type);

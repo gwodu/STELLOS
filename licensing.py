@@ -7,6 +7,9 @@ from typing import Optional, List, Any, Dict
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from supabase import create_client, Client
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Database
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
@@ -24,15 +27,20 @@ router = APIRouter(tags=["Licensing"])
 
 # --- Stripe & XRPL ---
 import stripe
-from xrpl.clients import JsonRpcClient
-from xrpl.wallet import Wallet
-from xrpl.models.transactions import Payment, Memo
-from xrpl.transaction import submit_and_wait
+try:
+    from xrpl.clients import JsonRpcClient
+    from xrpl.wallet import Wallet
+    from xrpl.models.transactions import Payment, Memo
+    from xrpl.transaction import submit_and_wait
+    XRPL_IMPORT_OK = True
+except Exception as e:
+    print(f"Warning: XRPL import failed, falling back to mock XRPL logging: {e}")
+    XRPL_IMPORT_OK = False
 
 stripe.api_key = os.environ.get("STRIPE_API_KEY", "")
-XRPL_CLIENT = JsonRpcClient("https://s.altnet.rippletest.net:51234/")
 XRPL_SEED = os.environ.get("XRPL_SEED", "")
-if XRPL_SEED:
+XRPL_CLIENT = JsonRpcClient("https://s.altnet.rippletest.net:51234/") if XRPL_IMPORT_OK else None
+if XRPL_IMPORT_OK and XRPL_SEED:
     xrpl_wallet = Wallet.from_seed(XRPL_SEED)
 else:
     xrpl_wallet = None
@@ -63,6 +71,15 @@ class DashboardResponse(BaseModel):
     total_licenses: int
     recent_licenses: List[Dict[str, Any]]
 
+class LicenseTemplateListResponse(BaseModel):
+    templates: List[LicenseTemplateResponse]
+
+class LicenseTemplateCreateRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price_cents: int
+    usage_terms_text: str
+
 # --- External Services ---
 
 def process_stripe_payment(amount_cents: int) -> str:
@@ -87,7 +104,7 @@ async def xrpl_record_license(license_id: str, license_hash: str):
     print(f"XRPL Background: Preparing to log license_id={license_id}, hash={license_hash}")
     
     if not xrpl_wallet:
-        print("Warning: XRPL_SEED not set. Simulating XRPL logging.")
+        print("Warning: XRPL unavailable or XRPL_SEED not set. Simulating XRPL logging.")
         await asyncio.sleep(2)
         mock_tx_hash = f"xrpl_mock_{uuid.uuid4().hex}"
         _update_license_xrpl(license_id, mock_tx_hash)
@@ -202,6 +219,41 @@ async def purchase_license(track_id: str, req: LicensePurchaseRequest, backgroun
         status="success",
         message="License purchased successfully"
     )
+
+@router.get("/tracks/{track_id}/license-templates", response_model=LicenseTemplateListResponse)
+def list_license_templates(track_id: str):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+
+    try:
+        res = supabase.table("license_templates").select("*").eq("track_id", track_id).execute()
+        return {"templates": res.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/admin/tracks/{track_id}/license-templates", response_model=LicenseTemplateResponse)
+def create_license_template(track_id: str, req: LicenseTemplateCreateRequest):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+
+    try:
+        track_res = supabase.table("tracks").select("id").eq("id", track_id).execute()
+        if not track_res.data:
+            raise HTTPException(status_code=404, detail="Track not found")
+
+        insert_res = supabase.table("license_templates").insert({
+            "track_id": track_id,
+            "name": req.name,
+            "description": req.description,
+            "price_cents": req.price_cents,
+            "usage_terms_text": req.usage_terms_text
+        }).execute()
+        if not insert_res.data:
+            raise HTTPException(status_code=500, detail="Failed to create template")
+        return insert_res.data[0]
+    except Exception as e:
+        if isinstance(e, HTTPException): raise
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/artists/{artist_id}/licensing-dashboard", response_model=DashboardResponse)
 def get_dashboard(artist_id: str):

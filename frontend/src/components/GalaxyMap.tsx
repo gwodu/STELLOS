@@ -12,30 +12,27 @@ export default function GalaxyMap() {
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
     useEffect(() => {
-        // Local Demo Mock Data for Visuals (Mainstream vs SoundCloud/Indie)
-        const mockTracks = [
-            // MAINSTREAM CLUSTER
-            { id: "1", title: "Not Like Us", artist_name: "Kendrick Lamar", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 60, map_y: 60 },
-            { id: "2", title: "God's Plan", artist_name: "Drake", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 62, map_y: 58 },
-            { id: "3", title: "The Hills", artist_name: "The Weeknd", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 58, map_y: 65 },
-            { id: "4", title: "Cruel Summer", artist_name: "Taylor Swift", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 50, map_y: 55 },
-            { id: "5", title: "Bad Guy", artist_name: "Billie Eilish", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 48, map_y: 60 },
-            { id: "6", title: "Blinding Lights", artist_name: "The Weeknd", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 55, map_y: 62 },
-            { id: "7", title: "As It Was", artist_name: "Harry Styles", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 45, map_y: 52 },
+        let alive = true;
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:7860";
 
-            // SOUNDCLOUD / INDIE / BEGINNER CLUSTER
-            { id: "8", title: "chillhop study loop 4", artist_name: "lofi_beats_247", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 20, map_y: 20 },
-            { id: "9", title: "first track on fl studio be nice", artist_name: "new_producer99", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 15, map_y: 80 },
-            { id: "10", title: "dark trap type beat", artist_name: "prod. shadow", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 80, map_y: 20 },
-            { id: "11", title: "bedroom pop guitar draft", artist_name: "sad_boy_summer", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 10, map_y: 35 },
-            { id: "12", title: "mumble rap freestyle pt 2", artist_name: "yung starz", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 85, map_y: 15 },
-            { id: "13", title: "hyperpop glitchcore test mix", artist_name: "xX_starlight.zip_Xx", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 90, map_y: 90 },
-            { id: "14", title: "ambient drone (unfinished)", artist_name: "echoes_in_space", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 5, map_y: 10 },
-            { id: "15", title: "my sister singing", artist_name: "local_band_drafts", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 35, map_y: 85 },
-            { id: "16", title: "Vaporwave Mall 1995", artist_name: "Macintosh Plus Fan", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 25, map_y: 30 },
-            { id: "17", title: "EDM Festival Banger WIP v8", artist_name: "DJ Spark Drop", audio_file_url: "", preview_file_url: "", status: "LIVE", map_x: 75, map_y: 75 },
-        ];
-        setTracks(mockTracks as any[]);
+        const fetchTracks = async () => {
+            try {
+                const res = await fetch(`${apiUrl}/tracks?status=LIVE`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!alive) return;
+                setTracks(data.tracks || []);
+            } catch (e) {
+                console.error("Failed to fetch tracks", e);
+            }
+        };
+
+        fetchTracks();
+        const id = setInterval(fetchTracks, 5000);
+        return () => {
+            alive = false;
+            clearInterval(id);
+        };
     }, [setTracks]);
 
     // Handle preview audio playback
@@ -100,11 +97,12 @@ export default function GalaxyMap() {
             filled: true,
             radiusScale: 1,
             radiusMinPixels: 4,
-            radiusMaxPixels: 20,
+            radiusMaxPixels: 30,
             lineWidthMinPixels: 1,
             getPosition: (d: any) => [d.map_x, d.map_y],
             getFillColor: (d: any) => (d.id === hoveredTrack?.id ? [255, 100, 100] : [100, 200, 255]),
             getLineColor: (d: any) => [255, 255, 255],
+            getRadius: (d: any) => 4 + Math.min(20, d.vote_score || 0),
             onHover: ({ object }) => {
                 if (object) {
                     setHoveredTrack(object);

@@ -5,10 +5,65 @@ import { useStore } from "../store";
 import { Play, Pause, SkipForward, Volume2 } from "lucide-react";
 
 export default function AudioPlayer() {
-    const { playingTrack, setPlayingTrack } = useStore();
+    const { playingTrack, setPlayingTrack, tracks, setTracks } = useStore();
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [progress, setProgress] = useState(0);
+    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [balance, setBalance] = useState<number | null>(null);
+    const [voteLoading, setVoteLoading] = useState(false);
+    const [templates, setTemplates] = useState<any[]>([]);
+    const [licenseLoading, setLicenseLoading] = useState(false);
+    const [licenseMessage, setLicenseMessage] = useState<string | null>(null);
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:7860";
+
+    useEffect(() => {
+        const existing = typeof window !== "undefined" ? localStorage.getItem("stellos_session_id") : null;
+        if (existing) {
+            setSessionId(existing);
+            return;
+        }
+        const newId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `sess_${Date.now()}`;
+        if (typeof window !== "undefined") {
+            localStorage.setItem("stellos_session_id", newId);
+        }
+        setSessionId(newId);
+    }, []);
+
+    useEffect(() => {
+        if (!sessionId) return;
+        const fetchBalance = async () => {
+            try {
+                const res = await fetch(`${apiUrl}/tokens/balance?session_id=${sessionId}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                setBalance(data.balance);
+            } catch (e) {
+                console.error("Failed to load token balance", e);
+            }
+        };
+        fetchBalance();
+    }, [sessionId, apiUrl]);
+
+    useEffect(() => {
+        if (!playingTrack) {
+            setTemplates([]);
+            setLicenseMessage(null);
+            return;
+        }
+        const fetchTemplates = async () => {
+            try {
+                const res = await fetch(`${apiUrl}/tracks/${playingTrack.id}/license-templates`);
+                if (!res.ok) return;
+                const data = await res.json();
+                setTemplates(data.templates || []);
+            } catch (e) {
+                console.error("Failed to load license templates", e);
+            }
+        };
+        fetchTemplates();
+    }, [playingTrack, apiUrl]);
 
     useEffect(() => {
         if (playingTrack && audioRef.current) {
@@ -31,6 +86,55 @@ export default function AudioPlayer() {
         if (audioRef.current) {
             const p = (audioRef.current.currentTime / audioRef.current.duration) * 100;
             setProgress(isNaN(p) ? 0 : p);
+        }
+    };
+
+    const handleVote = async () => {
+        if (!playingTrack || !sessionId || voteLoading) return;
+        setVoteLoading(true);
+        try {
+            const res = await fetch(`${apiUrl}/tracks/${playingTrack.id}/vote`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: sessionId, tokens_spent: 1 })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setBalance(data.balance);
+                const updated = tracks.map(t => t.id === playingTrack.id ? { ...t, vote_score: data.vote_score } : t);
+                setTracks(updated);
+                setPlayingTrack({ ...playingTrack, vote_score: data.vote_score });
+            } else {
+                alert(data.detail || "Vote failed");
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setVoteLoading(false);
+        }
+    };
+
+    const handleLicense = async (templateId: string) => {
+        if (!playingTrack || licenseLoading) return;
+        setLicenseLoading(true);
+        setLicenseMessage(null);
+        try {
+            const res = await fetch(`${apiUrl}/tracks/${playingTrack.id}/license`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ license_template_id: templateId })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setLicenseMessage(`License purchased. Hash: ${data.license_hash}`);
+            } else {
+                setLicenseMessage(data.detail || "License failed");
+            }
+        } catch (e) {
+            console.error(e);
+            setLicenseMessage("License failed");
+        } finally {
+            setLicenseLoading(false);
         }
     };
 
@@ -69,11 +173,37 @@ export default function AudioPlayer() {
                 </div>
             </div>
 
-            {/* Right Spacer for balance */}
-            <div className="flex-1 flex justify-end">
-                <button className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-full text-sm font-semibold transition-colors">
-                    Start Radio
-                </button>
+            {/* Right Actions */}
+            <div className="flex-1 flex flex-col items-end space-y-2">
+                <div className="flex items-center space-x-3">
+                    <span className="text-xs text-slate-400">Tokens: {balance ?? "..."}</span>
+                    <button
+                        onClick={handleVote}
+                        disabled={voteLoading || balance === 0}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-full text-xs font-semibold transition-colors"
+                    >
+                        {voteLoading ? "Voting..." : "Upvote (1)"}
+                    </button>
+                </div>
+                <div className="flex items-center space-x-2">
+                    {templates.length > 0 ? (
+                        <>
+                            <span className="text-xs text-slate-400">${(templates[0].price_cents / 100).toFixed(2)}</span>
+                            <button
+                                onClick={() => handleLicense(templates[0].id)}
+                                disabled={licenseLoading}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-full text-xs font-semibold transition-colors"
+                            >
+                                {licenseLoading ? "Licensing..." : "License Now"}
+                            </button>
+                        </>
+                    ) : (
+                        <span className="text-xs text-slate-500">No license</span>
+                    )}
+                </div>
+                {licenseMessage && (
+                    <div className="text-[10px] text-slate-400 max-w-xs text-right">{licenseMessage}</div>
+                )}
             </div>
         </div>
     );

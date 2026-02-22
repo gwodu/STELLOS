@@ -3,10 +3,13 @@ import uuid
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
+from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from datetime import datetime
 from licensing import router as licensing_router
+
+load_dotenv()
 
 class EventPayload(BaseModel):
     user_id: Optional[str] = None
@@ -29,6 +32,7 @@ app.add_middleware(
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+DEFAULT_TOKEN_BALANCE = int(os.environ.get("DEFAULT_TOKEN_BALANCE", "100"))
 if SUPABASE_URL and SUPABASE_KEY:
     try:
         supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -83,6 +87,35 @@ async def upload_audio(
         supabase.table("tracks").insert(track_data).execute()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DB error: {str(e)}")
+
+    # Demo: auto-associate artist + enable licensing + create a default template
+    try:
+        artist_id = None
+        artist_res = supabase.table("artists").select("id").eq("name", artist_name).limit(1).execute()
+        if artist_res.data:
+            artist_id = artist_res.data[0]["id"]
+        else:
+            a_insert = supabase.table("artists").insert({"name": artist_name}).execute()
+            if a_insert.data:
+                artist_id = a_insert.data[0]["id"]
+
+        if artist_id:
+            supabase.table("tracks").update({
+                "artist_id": artist_id,
+                "licensing_enabled": True
+            }).eq("id", track_id).execute()
+
+            tmpl_res = supabase.table("license_templates").select("id").eq("track_id", track_id).limit(1).execute()
+            if not tmpl_res.data:
+                supabase.table("license_templates").insert({
+                    "track_id": track_id,
+                    "name": "Standard License",
+                    "description": "Demo license for web and social usage.",
+                    "price_cents": 500,
+                    "usage_terms_text": "Non-exclusive license for digital use. Demo terms."
+                }).execute()
+    except Exception as e:
+        print(f"Warning: Failed to setup demo licensing: {e}")
         
     from process import make_preview, make_embedding
     background_tasks.add_task(make_preview, track_id, full_url)
@@ -186,6 +219,10 @@ class RadioNextRequest(BaseModel):
     last_track_id: str
     prompt_text: Optional[str] = None
 
+class VoteRequest(BaseModel):
+    session_id: str
+    tokens_spent: int = 1
+
 @app.post("/radio/start")
 def start_radio():
     if not supabase:
@@ -221,4 +258,76 @@ def next_radio_track(req: RadioNextRequest):
             
         return {"track": random.choice(candidates)}
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/tokens/balance")
+def get_token_balance(session_id: str):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+
+    try:
+        res = supabase.table("token_balances").select("*").eq("session_id", session_id).execute()
+        if res.data:
+            return {"session_id": session_id, "balance": res.data[0]["balance"]}
+
+        insert_res = supabase.table("token_balances").insert({
+            "session_id": session_id,
+            "balance": DEFAULT_TOKEN_BALANCE
+        }).execute()
+        balance = insert_res.data[0]["balance"] if insert_res.data else DEFAULT_TOKEN_BALANCE
+        return {"session_id": session_id, "balance": balance}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/tracks/{track_id}/vote")
+def vote_track(track_id: str, req: VoteRequest):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+
+    if req.tokens_spent <= 0:
+        raise HTTPException(status_code=400, detail="tokens_spent must be > 0")
+
+    try:
+        track_res = supabase.table("tracks").select("id, vote_score").eq("id", track_id).execute()
+        if not track_res.data:
+            raise HTTPException(status_code=404, detail="Track not found")
+    except Exception as e:
+        if isinstance(e, HTTPException): raise
+        raise HTTPException(status_code=500, detail=str(e))
+
+    try:
+        bal_res = supabase.table("token_balances").select("*").eq("session_id", req.session_id).execute()
+        if not bal_res.data:
+            bal_insert = supabase.table("token_balances").insert({
+                "session_id": req.session_id,
+                "balance": DEFAULT_TOKEN_BALANCE
+            }).execute()
+            balance = bal_insert.data[0]["balance"] if bal_insert.data else DEFAULT_TOKEN_BALANCE
+        else:
+            balance = bal_res.data[0]["balance"]
+
+        if balance < req.tokens_spent:
+            raise HTTPException(status_code=400, detail="Insufficient tokens")
+
+        new_balance = balance - req.tokens_spent
+        supabase.table("token_balances").update({
+            "balance": new_balance,
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("session_id", req.session_id).execute()
+
+        supabase.table("votes").insert({
+            "track_id": track_id,
+            "session_id": req.session_id,
+            "tokens_spent": req.tokens_spent
+        }).execute()
+
+        new_score = (track_res.data[0].get("vote_score") or 0) + req.tokens_spent
+        supabase.table("tracks").update({"vote_score": new_score}).eq("id", track_id).execute()
+
+        return {"track_id": track_id, "vote_score": new_score, "balance": new_balance}
+    except Exception as e:
+        if isinstance(e, HTTPException): raise
         raise HTTPException(status_code=500, detail=str(e))
