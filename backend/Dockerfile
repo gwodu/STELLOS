@@ -1,20 +1,23 @@
-# Use an official lightweight Python image
+# -------------------------------------------------
+# 1️⃣ Base image – Python 3.11 is extremely stable for AI/PyTorch
+# (3.12 is okay, but 3.11 guarantees full compatibility with LAION-CLAP)
+# -------------------------------------------------
 FROM python:3.11-slim
 
-# Install system dependencies required for audio processing
-RUN apt-get update && apt-get install -y \
+# -------------------------------------------------
+# 2️⃣ System packages needed for ffmpeg & building wheels
+# -------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    libsndfile1 \
+    curl \
+    git \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Set the working directory
-WORKDIR /app
-
-# Copy requirements and install
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Create a non-root user (Hugging Face Spaces REQUIRE app to not run as root)
+# -------------------------------------------------
+# 3️⃣ Create non-root user (MANDATORY for Hugging Face Spaces)
+# Hugging Face will crash or reject the container if it runs as root.
+# -------------------------------------------------
 RUN useradd -m -u 1000 user
 USER user
 ENV HOME=/home/user
@@ -22,11 +25,24 @@ ENV PATH=/home/user/.local/bin:$PATH
 
 WORKDIR $HOME/app
 
-# Copy the rest of the application code
+# -------------------------------------------------
+# 4️⃣ Install Python dependencies 
+# (Node.js is actually NOT required for your Python backend!)
+# -------------------------------------------------
+COPY --chown=user:user requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# -------------------------------------------------
+# 5️⃣ Copy the backend source code
+# -------------------------------------------------
 COPY --chown=user:user . .
 
-# Hugging Face Spaces exposed port is 7860
+# -------------------------------------------------
+# 6️⃣ Expose the FastAPI port (Hugging Face uses 7860 by default)
+# -------------------------------------------------
 EXPOSE 7860
 
-# Command to run the FastAPI app via Uvicorn
+# -------------------------------------------------
+# 7️⃣ Start the app
+# -------------------------------------------------
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
