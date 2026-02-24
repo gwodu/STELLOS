@@ -1,13 +1,30 @@
 import os
 import tempfile
 import requests
-import librosa
 import random
-import ffmpeg
-import torch
 from supabase import create_client
-from transformers import ClapModel, ClapProcessor
 from dotenv import load_dotenv
+
+try:
+    import ffmpeg
+except Exception:
+    ffmpeg = None
+
+try:
+    import librosa
+except Exception:
+    librosa = None
+
+try:
+    import torch
+except Exception:
+    torch = None
+
+try:
+    from transformers import ClapModel, ClapProcessor
+except Exception:
+    ClapModel = None
+    ClapProcessor = None
 
 load_dotenv()
 
@@ -22,16 +39,24 @@ if SUPABASE_URL and SUPABASE_KEY:
 
 # Load model globally so it stays in memory across background tasks
 model_id = "laion/clap-htsat-unfused"
-try:
-    processor = ClapProcessor.from_pretrained(model_id)
-    model = ClapModel.from_pretrained(model_id)
-except Exception as e:
-    print(f"Failed to load CLAP model globally: {e}")
+if ClapModel is None or ClapProcessor is None:
+    print("Transformers/CLAP not installed; embedding generation disabled.")
     processor = None
     model = None
+else:
+    try:
+        processor = ClapProcessor.from_pretrained(model_id)
+        model = ClapModel.from_pretrained(model_id)
+    except Exception as e:
+        print(f"Failed to load CLAP model globally: {e}")
+        processor = None
+        model = None
 
 def make_preview(track_id: str, audio_url: str):
     print(f"make_preview background task started for {track_id}")
+    if ffmpeg is None:
+        print("ffmpeg-python not installed; skipping preview generation")
+        return
     r = requests.get(audio_url)
     if r.status_code != 200:
         print("Failed to download audio for preview")
@@ -80,7 +105,7 @@ def make_preview(track_id: str, audio_url: str):
 
 def make_embedding(track_id: str, audio_url: str):
     print(f"make_embedding background task started for {track_id}")
-    if not supabase or not model or not processor:
+    if not supabase or not model or not processor or not librosa or not torch:
         print("Missing deps for embedding")
         return
         
