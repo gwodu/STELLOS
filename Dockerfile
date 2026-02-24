@@ -44,5 +44,6 @@ EXPOSE 7860
 
 # -------------------------------------------------
 # 7️⃣ Start the app
+# Railway provides PORT at runtime; default to 7860 locally.
 # -------------------------------------------------
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-7860}"]
