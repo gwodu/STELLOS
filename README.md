@@ -83,7 +83,7 @@ Expected:
 {"status":"ok","message":"STELLOS API"}
 ```
 
-### Full dependency install (includes ML pipeline deps)
+### Full dependency install (includes everything from `requirements.txt`)
 
 ```bash
 python3 -m venv .venv
@@ -91,6 +91,12 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 7860 --reload
+```
+
+### Install ML dependencies (for vectorization worker)
+
+```bash
+pip install -r requirements_ml.txt
 ```
 
 ## 5. Frontend Setup and Run
@@ -156,7 +162,31 @@ sudo ufw allow 7860
 python scripts/seed_demo.py --path /path/to/audio --artist "Demo Artist" --api-url http://localhost:7860
 ```
 
-## 9. Common Errors and Fixes
+## 9. Async Vectorization Worker
+
+Use a separate worker process/service to vectorize uploaded tracks.
+
+```bash
+cd /path/to/STELLOS
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -r requirements_ml.txt
+python scripts/ml_worker.py --interval 20 --batch-size 10
+```
+
+What it does:
+- Polls tracks with status `UPLOADED` or `PREVIEW_READY`
+- Marks track status as `EMBEDDING`
+- Computes CLAP embedding
+- Updates track with `embedding_vector`, map coordinates, and `status=LIVE`
+
+Run once:
+
+```bash
+python scripts/ml_worker.py --once
+```
+
+## 10. Common Errors and Fixes
 
 ### `ModuleNotFoundError: No module named 'stripe'`
 
@@ -183,7 +213,7 @@ pip install python-multipart==0.0.9
 - Confirm backend is running on `0.0.0.0:7860`.
 - Confirm port `7860` is reachable.
 
-## 10. Docker (Optional)
+## 11. Docker (Optional)
 
 Build and run:
 
