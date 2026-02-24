@@ -6,7 +6,18 @@ import { ScatterplotLayer, LineLayer } from "@deck.gl/layers";
 import { useStore } from "../store";
 
 export default function GalaxyMap() {
-    const { tracks, setTracks, setHoveredTrack, hoveredTrack, setPlayingTrack, viewState, setViewState } = useStore();
+    const {
+        tracks,
+        setTracks,
+        setHoveredTrack,
+        hoveredTrack,
+        setPlayingTrack,
+        viewState,
+        setViewState,
+        pendingUploadTrackId,
+        setPendingUploadTrackId,
+    } = useStore();
+    const [highlightTrackId, setHighlightTrackId] = useState<string | null>(null);
 
     // A simple hacky audio ref to play previews instantly
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -34,6 +45,33 @@ export default function GalaxyMap() {
             clearInterval(id);
         };
     }, [setTracks]);
+
+    useEffect(() => {
+        if (!pendingUploadTrackId || !tracks.length) return;
+        const placed = tracks.find((t) => t.id === pendingUploadTrackId);
+        if (!placed) return;
+
+        setHighlightTrackId(placed.id);
+        setHoveredTrack(placed);
+        setPlayingTrack(placed);
+        setViewState({
+            longitude: placed.map_x,
+            latitude: placed.map_y,
+            zoom: Math.max(viewState.zoom, 5),
+        });
+        setPendingUploadTrackId(null);
+
+        const timeout = setTimeout(() => setHighlightTrackId(null), 12000);
+        return () => clearTimeout(timeout);
+    }, [
+        tracks,
+        pendingUploadTrackId,
+        setPendingUploadTrackId,
+        setHoveredTrack,
+        setPlayingTrack,
+        setViewState,
+        viewState.zoom,
+    ]);
 
     // Handle preview audio playback
     useEffect(() => {
@@ -100,9 +138,16 @@ export default function GalaxyMap() {
             radiusMaxPixels: 30,
             lineWidthMinPixels: 1,
             getPosition: (d: any) => [d.map_x, d.map_y],
-            getFillColor: (d: any) => (d.id === hoveredTrack?.id ? [255, 100, 100] : [100, 200, 255]),
+            getFillColor: (d: any) => {
+                if (d.id === highlightTrackId) return [255, 215, 0];
+                if (d.id === hoveredTrack?.id) return [255, 100, 100];
+                return [100, 200, 255];
+            },
             getLineColor: (d: any) => [255, 255, 255],
-            getRadius: (d: any) => 4 + Math.min(20, d.vote_score || 0),
+            getRadius: (d: any) => {
+                if (d.id === highlightTrackId) return 20;
+                return 4 + Math.min(20, d.vote_score || 0);
+            },
             onHover: ({ object }) => {
                 if (object) {
                     setHoveredTrack(object);

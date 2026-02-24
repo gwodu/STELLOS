@@ -9,7 +9,7 @@ export default function UploadModal({ onClose }: { onClose: () => void }) {
     const [title, setTitle] = useState("");
     const [artist, setArtist] = useState("");
     const [uploading, setUploading] = useState(false);
-    const { tracks, setTracks } = useStore();
+    const { setPendingUploadTrackId } = useStore();
 
     const handleUpload = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -29,6 +29,10 @@ export default function UploadModal({ onClose }: { onClose: () => void }) {
             });
 
             if (res.ok) {
+                const payload = await res.json();
+                if (payload?.track_id) {
+                    setPendingUploadTrackId(payload.track_id);
+                }
                 // Technically we should poll or push to state, but for MVP we will just close.
                 // The track gets placed randomly almost immediately since preview/embedding are async.
                 onClose();

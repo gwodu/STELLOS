@@ -107,12 +107,12 @@ def make_embedding(track_id: str, audio_url: str):
     print(f"make_embedding background task started for {track_id}")
     if not supabase or not model or not processor or not librosa or not torch:
         print("Missing deps for embedding")
-        return
+        return False
         
     r = requests.get(audio_url)
     if r.status_code != 200:
         print("Failed to download audio for embedding")
-        return
+        return False
         
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f_in:
         f_in.write(r.content)
@@ -128,7 +128,7 @@ def make_embedding(track_id: str, audio_url: str):
         except Exception as e:
             print(f"Embedding extraction failed: {str(e)}")
             os.remove(f_in.name)
-            return
+            return False
             
     os.remove(f_in.name)
     
@@ -147,5 +147,7 @@ def make_embedding(track_id: str, audio_url: str):
     try:
         supabase.table("tracks").update(update_data).eq("id", track_id).execute()
         print(f"Successfully embedded and mapped {track_id}")
+        return True
     except Exception as e:
         print(f"DB update failed: {str(e)}")
+        return False

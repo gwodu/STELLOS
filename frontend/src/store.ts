@@ -25,6 +25,9 @@ interface StellosState {
     playingTrack: Track | null;
     setPlayingTrack: (track: Track | null) => void;
 
+    pendingUploadTrackId: string | null;
+    setPendingUploadTrackId: (trackId: string | null) => void;
+
     viewState: {
         longitude: number;
         latitude: number;
@@ -42,6 +45,9 @@ export const useStore = create<StellosState>((set) => ({
 
     playingTrack: null,
     setPlayingTrack: (track) => set({ playingTrack: track }),
+
+    pendingUploadTrackId: null,
+    setPendingUploadTrackId: (trackId) => set({ pendingUploadTrackId: trackId }),
 
     viewState: {
         longitude: 50, // Center of our 0-100 random map

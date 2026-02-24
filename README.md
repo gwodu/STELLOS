@@ -186,6 +186,17 @@ Run once:
 python scripts/ml_worker.py --once
 ```
 
+### Deploy worker on Railway (recommended)
+
+1. Create a second Railway service from the same repo.
+2. In that worker service, set Dockerfile path to `Dockerfile.worker`.
+3. Add env vars:
+   - `SUPABASE_URL`
+   - `SUPABASE_KEY`
+4. Deploy and keep the service running.
+
+The worker service does not need a public domain. It runs in the background and updates tracks to `LIVE`.
+
 ## 10. Common Errors and Fixes
 
 ### `ModuleNotFoundError: No module named 'stripe'`
@@ -212,6 +223,14 @@ pip install python-multipart==0.0.9
   - `NEXT_PUBLIC_API_URL=http://localhost:7860` (or LAN IP)
 - Confirm backend is running on `0.0.0.0:7860`.
 - Confirm port `7860` is reachable.
+
+### `Embedding extraction failed: No module named 'pkg_resources'`
+
+Install/update `setuptools` in worker env:
+
+```bash
+pip install -U setuptools
+```
 
 ## 11. Docker (Optional)
 

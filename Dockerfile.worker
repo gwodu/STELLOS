@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -u 1000 user
+USER user
+ENV HOME=/home/user
+ENV PATH=/home/user/.local/bin:$PATH
+WORKDIR $HOME/app
+
+COPY --chown=user:user requirements_worker.txt .
+RUN pip install --no-cache-dir -r requirements_worker.txt
+
+COPY --chown=user:user . .
+
+CMD ["python", "scripts/ml_worker.py", "--interval", "20", "--batch-size", "10"]

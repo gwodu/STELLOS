@@ -3,9 +3,15 @@ import argparse
 import os
 import sys
 import time
+from pathlib import Path
 
 from dotenv import load_dotenv
 from supabase import Client, create_client
+
+# Ensure repo root is importable when running `python scripts/ml_worker.py`.
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 # Reuse embedding pipeline logic from backend.
 from process import make_embedding
@@ -59,7 +65,13 @@ def process_batch(supabase: Client, batch_size: int):
         except Exception as exc:
             print(f"[worker] could not set EMBEDDING for {track_id}: {exc}")
 
-        make_embedding(track_id, audio_url)
+        success = make_embedding(track_id, audio_url)
+        if not success:
+            # Put the track back so it can be retried on future worker loops.
+            try:
+                supabase.table("tracks").update({"status": "PREVIEW_READY"}).eq("id", track_id).execute()
+            except Exception as exc:
+                print(f"[worker] could not reset status for {track_id}: {exc}")
         processed += 1
 
     return processed
