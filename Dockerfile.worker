@@ -1,5 +1,7 @@
 FROM python:3.11-slim
 
+ENV PYTHONUNBUFFERED=1
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
@@ -16,4 +18,4 @@ RUN pip install --no-cache-dir -r requirements_worker.txt
 
 COPY --chown=user:user . .
 
-CMD ["python", "scripts/ml_worker.py", "--interval", "20", "--batch-size", "10"]
+CMD ["python", "-u", "scripts/ml_worker.py", "--interval", "20", "--batch-size", "10"]
