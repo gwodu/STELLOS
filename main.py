@@ -1,6 +1,6 @@
 import os
 import uuid
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -52,8 +52,8 @@ app.include_router(licensing_router)
 async def upload_audio(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...), 
-    title: str = "Unknown Title", 
-    artist_name: str = "Unknown Artist"
+    title: str = Form("Unknown Title"), 
+    artist_name: str = Form("Unknown Artist")
 ):
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured")
